@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inspection Attached Picture App</title>
+    <style>
+        /* Pengaturan Dasar Aplikasi */
+        body { font-family: Arial, sans-serif; margin: 20px; color: #000; background-color: #f0f2f5; }
+        
+        /* Panel Kontrol Atas (Disembunyikan saat Print) */
+        .no-print { 
+            max-width: 900px; margin: 0 auto 20px auto; padding: 20px; 
+            background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+        }
+        .btn { padding: 12px 24px; font-size: 14px; font-weight: bold; cursor: pointer; border: none; border-radius: 4px; }
+        .btn-camera { background-color: #0056b3; color: white; }
+        .btn-print { background-color: #28a745; color: white; margin-left: 10px; }
+        .btn-danger { background-color: #dc3545; color: white; margin-left: 10px; }
+        
+        /* Kertas Form Inspeksi (Meniru Skala Dokumen Asli) */
+        .page-document { 
+            width: 210mm; min-height: 297mm; padding: 15mm; 
+            margin: 0 auto; background: white; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        /* 1. Header Kop Surat */
+        .header-table { width: 100%; border-collapse: collapse; border: 1px solid #000; }
+        .header-table td { border: 1px solid #000; padding: 8px; vertical-align: middle; }
+        .logo-box { width: 15%; text-align: center; }
+        .logo-circle { 
+            width: 60px; height: 60px; border: 3px solid #002060; border-radius: 50%; 
+            display: inline-flex; align-items: center; justify-content: center; 
+            font-size: 32px; font-weight: bold; color: #002060; 
+        }
+        .company-title { font-size: 20px; font-weight: bold; color: #002060; margin: 0; }
+        .company-address { font-size: 10px; margin: 3px 0 0 0; line-height: 1.3; font-weight: bold; }
+        
+        /* Judul Dokumen Utama */
+        .doc-title-row { text-align: center; font-weight: bold; font-size: 16px; padding: 8px 0; border-top: 2px solid #000; border-bottom: 2px solid #000; margin: 15px 0 10px 0; letter-spacing: 0.5px; }
+
+        /* 2. Metadata Proyek */
+        .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        .meta-table td { border: none; padding: 4px 0; font-size: 12px; vertical-align: middle; }
+        .meta-table input { border: none; border-bottom: 1px dashed #777; width: 85%; font-size: 12px; font-weight: bold; outline: none; padding: 2px; }
+
+        /* 3. Layout Grid 2 Kolom untuk Foto */
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; margin-bottom: auto; }
+        .photo-block { border: 1px solid #000; padding: 10px; box-sizing: border-box; display: flex; flex-direction: column; position: relative; }
+        .img-wrapper { width: 100%; height: 200px; border: 1px solid #aaa; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fafafc; }
+        .img-wrapper img { width: 100%; height: 100%; object-fit: contain; }
+        .note-area { width: 100%; border: none; resize: none; margin-top: 10px; font-family: inherit; font-size: 12px; line-height: 1.4; outline: none; padding: 4px 0; }
+        
+        /* Tombol Hapus per Item Foto (Hanya saat edit) */
+        .delete-btn { position: absolute; top: 5px; right: 5px; background: rgba(220,53,69,0.9); color: white; border: none; padding: 3px 8px; border-radius: 3px; font-size: 11px; cursor: pointer; font-weight: bold; }
+
+        /* 4. Footer Tanda Tangan */
+        .footer-table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+        .footer-table td { border: 1px solid #000; width: 33.33%; padding: 8px; font-size: 10px; height: 95px; vertical-align: cubic-bezier; display: table-cell; }
+        .signature-title { font-weight: bold; min-height: 35px; }
+        .signature-company { font-weight: bold; margin-top: 40px; text-transform: uppercase; }
+
+        /* 🖨️ CSS Kritis Saat Dicetak / Dibuat PDF */
+        @media print {
+            body { margin: 0; background: white; }
+            .no-print, .delete-btn { display: none !important; }
+            .page-document { width: 100%; padding: 0; box-shadow: none; min-height: 100vh; }
+            .meta-table input { border-bottom: none !important; }
+            .photo-block { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- KONTROL APLIKASI (Sembunyi saat print) -->
+    <div class="no-print">
+        <h2>📸 Pengisi Form Inspeksi LE</h2>
+        <p>Gunakan tombol di bawah untuk mengambil gambar atau upload temuan lapangan. Form akan tersusun rapi otomatis.</p>
+        
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
+        <button class="btn btn-camera" onclick="document.getElementById('cameraInput').click()">📸 Ambil Foto Lapangan</button>
+        <button class="btn btn-print" onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
+        <button class="btn btn-danger" onclick="resetFormData()">🔄 Reset Ulang Form</button>
+    </div>
+
+    <!-- HALAMAN DOKUMEN CETAK -->
+    <div class="page-document" id="documentPage">
+        <div>
+            <!-- KOP SURAT (Ditiru sesuai gambar asli) -->
+            <table class="header-table">
+                <tr>
+                    <td class="logo-box">
+                        <div class="logo-circle">LE</div>
+                    </td>
+                    <td>
+                        <h1 class="company-title">LIONG ENGINEERING SDN. BHD.</h1>
+                        <p class="company-address">
+                            47, MEDAN PUTRA BUSINESS CENTRE, JALAN MEDAN PUTRA 6<br>
+                            (JALAN 6/62D) BANDAR MANJALARA, 52200 KUALA LUMPUR<br>
+                            TEL: 03-6261 9247 &nbsp;&nbsp; Email: liongengineering@hotmail.com
+                        </p>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- JUDUL FORM -->
+            <div class="doc-title-row">INSPECTION ATTACHED PICTURE</div>
+
+            <!-- METADATA PROYEK -->
+            <table class="meta-table">
+                <tr>
+                    <td style="width: 12%;">Project Name</td>
+                    <td style="width: 38%;">: <input type="text" id="projName" value="RIANA DUTAMAS phase 3" oninput="saveTextData()"></td>
+                    <td style="width: 15%;">Checklist Ref No</td>
+                    <td style="width: 35%;">: <input type="text" id="refNo" value="IBSB/RD3/M&E/ACMV/" oninput="saveTextData()"></td>
+                </tr>
+                <tr>
+                    <td>Kontraktor</td>
+                    <td>: <input type="text" id="contractor" value="LIONG Engineering sdn bhd" oninput="saveTextData()"></td>
+                    <td>Date</td>
+                    <td>: <input type="text" id="docDate" placeholder="dd/mm/yyyy" oninput="saveTextData()"></td>
+                </tr>
+            </table>
+
+            <!-- WADAH FOTO OTOMATIS (GRID 2 KOLOM) -->
+            <div class="grid-container" id="photoGrid">
+                <!-- Foto baru dan catatan akan masuk ke sini lewat JS -->
+            </div>
+        </div>
+
+        <!-- FOOTER TANDA TANGAN -->
+        <table class="footer-table">
+            <tr>
+                <td>
+                    <div class="signature-title">M&E Contractor Representative<br>Inspection by: <input type="text" id="sign1" style="border:none; border-bottom:1px dashed #aaa; font-size:10px;" oninput="saveTextData()"></div>
+                    <div class="signature-company">LIONG ENGINEERING SDN. BHD.</div>
+                </td>
+                <td>
+                    <div class="signature-title">Main Contractor Representative<br>Inspection by: <input type="text" id="sign2" style="border:none; border-bottom:1px dashed #aaa; font-size:10px;" oninput="saveTextData()"></div>
+                    <div class="signature-company">INTA BINA SDN. BHD.</div>
+                </td>
+                <td>
+                    <div class="signature-title">Consultant Representative RE/CO/OW<br>Inspection by: <input type="text" id="sign3" style="border:none; border-bottom:1px dashed #aaa; font-size:10px;" oninput="saveTextData()"></div>
+                    <div class="signature-company">MEP ENGINEERING SDN. BHD.</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- LOGIKA JAVASCRIPT APLIKASI -->
+    <script>
+        const cameraInput = document.getElementById('cameraInput');
+        const photoGrid = document.getElementById('photoGrid');
+        
+        // Otomatisasi isi tanggal hari ini jika data kosong
+        if(!localStorage.getItem('docDate')) {
+            const today = new Date();
+            document.getElementById('docDate').value = `${today.getDate()}/${today.getMonth()+1}/${today.getFullYear()}`;
+        }
+
+        // Jalankan pemuatan data tersimpan ketika web dibuka
+        window.addEventListener('load', loadSavedData);
+
+        // Aksi saat user berhasil mengambil foto
+        cameraInput.addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (files.length === 0) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const base64Image = event.target.result;
+                addPhotoBlock(base64Image, "");
+                savePhotosToLocal();
+            };
+            reader.readAsDataURL(files[0]);
+            cameraInput.value = ''; // reset input agar bisa digunakan berulang kali
+        });
+
+        // Fungsi menyusun kotak foto baru ke dalam Grid
+        function addPhotoBlock(imgSrc, noteText) {
+            const block = document.createElement('div');
+block.className = 'photo-block';
+block.innerHTML = <button class="delete-btn" onclick="removePhotoBlock(this)">Hapus</button> <div class="img-wrapper"> <img src="${imgSrc}" alt="Inspection Item"> </div> <textarea class="note-area" placeholder="- Inspection item note / description here..." rows="3" oninput="savePhotosToLocal()">${noteText}</textarea>;
+photoGrid.appendChild(block);
+}
+// Fungsi menghapus blok foto tertentu
+function removePhotoBlock(button) {
+if(confirm("Hapus foto temuan ini?")) {
+button.parentElement.remove();
+savePhotosToLocal();
+}
+}
+// Simpan teks informasi ke lokal storage browser
+function saveTextData() {
+localStorage.setItem('projName', document.getElementById('projName').value);
+localStorage.setItem('refNo', document.getElementById('refNo').value);
+localStorage.setItem('contractor', document.getElementById('contractor').value);
+localStorage.setItem('docDate', document.getElementById('docDate').value);
+localStorage.setItem('sign1', document.getElementById('sign1').value);
+localStorage.setItem('sign2', document.getElementById('sign2').value);
+localStorage.setItem('sign3', document.getElementById('sign3').value);
+}
+// Simpan susunan foto dan catatan ke lokal storage browser
+function savePhotosToLocal() {
+const blocks = document.querySelectorAll('.photo-block');
+const data = [];
+blocks.forEach(b => {
+const src = b.querySelector('img').src;
+const note = b.querySelector('.note-area').value;
+data.push({ src, note });
+});
+localStorage.setItem('savedInspectionPhotos', JSON.stringify(data));
+}
+// Memuat kembali data yang tersimpan otomatis
+function loadSavedData() {
+if(localStorage.getItem('projName')) document.getElementById('projName').value = localStorage.getItem('projName');
+if(localStorage.getItem('refNo')) document.getElementById('refNo').value = localStorage.getItem('refNo');
+if(localStorage.getItem('contractor')) document.getElementById('contractor').value = localStorage.getItem('contractor');
+if(localStorage.getItem('docDate')) document.getElementById('docDate').value = localStorage.getItem('docDate');
+if(localStorage.getItem('sign1')) document.getElementById('sign1').value = localStorage.getItem('sign1');
+if(localStorage.getItem('sign2')) document.getElementById('sign2').value = localStorage.getItem('sign2');
+if(localStorage.getItem('sign3')) document.getElementById('sign3').value = localStorage.getItem('sign3');
+const savedPhotos = localStorage.getItem('savedInspectionPhotos');
+if(savedPhotos) {
+const data = JSON.parse(savedPhotos);
+data.forEach(item => addPhotoBlock(item.src, item.note));
+}
+}
+// Bersihkan seluruh form untuk memulai inspeksi baru
+function resetFormData() {
+if(confirm("Apakah Anda ingin menghapus seluruh foto dan memulai form baru?")) {
+localStorage.removeItem('savedInspectionPhotos');
+photoGrid.innerHTML = '';
+}
+}
